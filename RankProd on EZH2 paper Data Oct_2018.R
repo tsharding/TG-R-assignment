@@ -140,6 +140,9 @@ cl <- c(0,0,0,1,1,1)
   RP.custom <- function(cell.line.in, treatment1.in, treatment2.in, day.in,FPKM.filtercuttoff = 0,FC.filtercuttoff = 1.5){
     RP.custom.out <- data.frame(row.names = RQD_filtered.geneIDs)
     RP.custom.in <- RankProducts(RP.expr.data(cell.line.in, treatment1.in, treatment2.in, day.in),cl,logged = FALSE,gene.names = RQD_filtered.geneIDs) #random seed not fixed as above
+    print(topGene(RP.custom.in,cutoff = 0.05, method = "pfp",logged = FALSE, gene.names = RQD_filtered.geneIDs))
+    print("pfp<0.05")
+    print(sum(RP.custom.in$pfp <0.05))
     #(cuffdiff outputs previously parsed into workspace labeled with following format: e.g. MA1vME1 or FA5vFB5 )
     #see below to parse in
     Old.data.name <- paste(cell.line.in,treatment1.in,day.in,"v",cell.line.in,treatment2.in,day.in, sep = "")
@@ -224,7 +227,7 @@ cl <- c(0,0,0,1,1,1)
   rm(x)
   
   
-############################################################333
+############################################################
 #for parsing in/out provided cuffdiff data
   cuffdiff.names <- c("MA1vME1","MA4vME4","MA5vME5","MA5vMB5","MA5vMG5","FA1vFE1","FA4vFE4","FA5vFE5","FA5vFB5","FA5vFG5")
   setwd("D:/Post-doc applications/TG at UCSF/Re-quantfied EZH2 paper RNASEQ data cuffdiff output/")
@@ -241,3 +244,542 @@ cl <- c(0,0,0,1,1,1)
     assign(in.name, in.data)
   }
   rm(x,in.data,in.name)
+  
+  
+##################################################################################################
+###Network analyis################################################################################
+##################################################################################################
+  
+#redo RankProduct analysis, but don't filter against old cuffdiff output data
+RP.custom.2 <- function(cell.line.in, treatment1.in, treatment2.in, day.in,FPKM.filtercuttoff = 0,FC.filtercuttoff = 1.5){
+  RP.custom.out <- data.frame(row.names = RQD_filtered.geneIDs)
+  RP.custom.in <- RankProducts(RP.expr.data(cell.line.in, treatment1.in, treatment2.in, day.in),cl,logged = FALSE,gene.names = RQD_filtered.geneIDs) #random seed not fixed as above
+  #print(topGene(RP.custom.in,cutoff = 0.05, method = "pfp",logged = FALSE, gene.names = RQD_filtered.geneIDs))
+  print("pfp<0.05")
+  print(sum(RP.custom.in$pfp <0.05))
+  #data =.frame key for filtering fc values based on upregulated or downregulated
+  RP.updownkey <- data.frame ("up" = (1/RP.custom.in$AveFC)>1,"down" = (1/RP.custom.in$AveFC)<1)
+  RP.custom.out$RP.pfp <- rowSums(RP.updownkey*RP.custom.in$pfp)
+  RP.custom.out$RP.fc <- 1/RP.custom.in$AveFC # invert so that >1 = upreg and <1 = downreg (class2/class1) as in cuffdiff output
+  #fold change for IPA must be in -inf to -1 and 1 to inf format - must convert downregulated genes
+  RP.custom.out$RP.fc[RP.updownkey$down,] <- -1*(1/RP.custom.out$RP.fc[RP.updownkey$down,])
+  RP.custom.out$CL.mean.FPKM1 <- rowMeans(RP.expr.data(cell.line.in, treatment1.in, treatment2.in, day.in)[,1:3])
+  RP.custom.out$CL.mean.FPKM2 <- rowMeans(RP.expr.data(cell.line.in, treatment1.in, treatment2.in, day.in)[,4:6])
+  
+  #filtering
+  
+  print("filter for FPKM<1 in both conditions - remaining genes:")
+  RP.custom.out <- RP.custom.out[!(RP.custom.out$CL.mean.FPKM1 <1 & RP.custom.out$CL.mean.FPKM2 <1 ),]
+  print(length(RP.custom.out$RP.pfp))
+  print("pfp<0.05")
+  print(sum(RP.custom.in$pfp <0.05))
+  
+  print("filter for |fc|>=1.5 in both conditions - remaining genes:")
+  RP.custom.out <- RP.custom.out[abs(RP.custom.out$RP.fc) >=1.5,]
+  print(length(RP.custom.out$RP.pfp))
+  print("pfp<0.05")
+  print(sum(RP.custom.in$pfp <0.05))
+  return(RP.custom.out)
+  
+  }
+  
+  MA1vME1.2.ipa <- RP.custom.2("M","A","E","1")
+  MA4vME4.2.ipa <- RP.custom.2("M","A","E","4")
+  MA5vME5.2.ipa <- RP.custom.2("M","A","E","5")
+  MA5vMB5.2.ipa <- RP.custom.2("M","A","B","5")
+  MA5vMG5.2.ipa <- RP.custom.2("M","A","G","5")
+  FA1vFE1.2.ipa <- RP.custom.2("F","A","E","1")
+  FA4vFE4.2.ipa <- RP.custom.2("F","A","E","4")
+  FA5vFE5.2.ipa <- RP.custom.2("F","A","E","5")
+  FA5vFB5.2.ipa <- RP.custom.2("F","A","B","5")
+  FA5vFG5.2.ipa <- RP.custom.2("F","A","G","5")  
+  
+IPAnames.2 <-  c("MA1vME1.2.ipa","MA4vME4.2.ipa","MA5vME5.2.ipa","MA5vMB5.2.ipa","MA5vMG5.2.ipa","FA1vFE1.2.ipa","FA4vFE4.2.ipa","FA5vFE5.2.ipa","FA5vFB5.2.ipa","FA5vFG5.2.ipa")
+  
+#Parse out data for IPA network analysis
+  setwd("D:/Post-doc applications/TG at UCSF/Re-quantfied EZH2 paper RNASEQ data for IPA import/")  
+  
+  for (x in IPAnames.2) {
+    data <- get(x)
+    print(x)
+    write.table(data,file = paste(x,".txt"),sep = "\t",quote = FALSE,row.names = TRUE,col.names = FALSE)
+  }
+  rm(x,data)
+  
+#data imported to IPA with pfp<0.05 as cutoff
+#insuficient number of genes for analysis of day 1 data for either cell line
+#data manually exported to tab deliited text files and are parsed in below
+#no GO analysis for the purposes of this
+  
+  #read in tab delim files
+  #pathway
+  #set wd to pathway analysis files
+  setwd("D:/Post-doc applications/TG at UCSF/Re-quantfied EZH2 paper RNASEQ data for IPA output/Pathway/")  
+  for(x in list.files()){
+    xx <- unlist(strsplit(x,split = ".txt"))
+    y <- read.table(x,header = TRUE,sep = "\t",stringsAsFactors = FALSE,skip = 2)
+    #get molecules as list instead of comma delim
+    y$list <- sapply(y$Molecules, function(x){unlist(strsplit(x,split = ","))})
+    y <- y[,c("Ingenuity.Canonical.Pathways","X.log.p.value.","z.score","list")]
+    assign(paste(xx,"IPA_pathway","3",sep = "_"),y)
+  }
+  rm(x,xx,y)
+  
+  #upstream
+  #set wd to upstream analysis files
+  setwd("D:/Post-doc applications/TG at UCSF/Re-quantfied EZH2 paper RNASEQ data for IPA output/UR/")  
+  for(x in list.files()){
+    print(x)
+    xx <- unlist(strsplit(x,split = ".txt"))
+    
+    y <- read.table(x,header = TRUE,sep = "\t",stringsAsFactors = FALSE,skip = 2,fill = TRUE) 
+    #must manually add null activation Z score cols for both A5vB5's (column does not exist in output file)
+    if (xx == "MA5vMB5" | xx == "FA5vFB5" ){
+      y$Activation.z.score <- NA
+    }
+    #get molecules as list instead of comma delim
+    y$list <- sapply(y$Target.molecules.in.dataset, function(x){unlist(strsplit(x,split = ","))})
+    y <- y[,c("Upstream.Regulator","p.value.of.overlap","Activation.z.score","list")]
+    assign(paste(xx,"IPA_upstream","3",sep = "_"),y)
+  }
+  rm(x,xx,y)
+  
+  #make named list of df names for each
+  IPA.all <- c("FA4vFE4", "FA5vFB5", "FA5vFE5", "FA5vFG5", "MA4vME4", "MA5vMB5", "MA5vME5", "MA5vMG5")
+  IPA.pathway.3 <- sapply(IPA.all,function(x) {paste(x,"IPA_pathway_3",sep = "_")})
+  IPA.upstream.3 <- sapply(IPA.all,function(x) {paste(x,"IPA_upstream_3",sep = "_")})
+  
+########### visualization via pheatmap ##################################################
+  
+  #pheatmap
+  install.packages("pheatmap") #installs rcolorbrewer
+  library("pheatmap")
+
+  
+#new pheatmap generating function that compares IPA outputs from old and RP data
+    
+  #accepts list (char) of regulators or pathways in order - plots heat map forthose
+  #use two color scales (trick into displaying both by hybrid color scale - add 100 to z-scores)
+  #2 types accepted: "IPA_pathway" ; "IPA_upstream2"
+  # p-val is column 2 for all three; z-score is column 3 for all three
+  #grey indicates no score was provided to distinguish from a non-significant score (white)
+  #differencs from IPA.heatmap3
+    #type is only pathway or UR, internally aquires both version 2 (old data) and 3 (Rankproduct data)
+    #dont incorperate UTC genes
+  IPA.heatmap4 <- function(IPA.id.list,type, width = 15, height = 15, analysis.number = "3"){ 
+    
+    DF<-data.frame(row.names = IPA.id.list)#set empty DF to be filled with heatmap data
+    
+    names<-  c(sapply(IPA.all,function(x) {paste(x,type,"2",sep = "_")}),sapply(IPA.all,function(x) {paste(x,type,analysis.number,sep = "_")}))
+    #re-order to place cell lines next to each other
+    names<- names[c(1:4,9:12,5:8,13:16)]
+    for(x in names){
+      DF.IPA <- get(x)
+      DF.IPA[is.na(DF.IPA)] <- 50 #!!!!!!!!changed from origional - change NaN to 50 not 0 (to distinguish on color scale)
+      DF.ipa.test.2 <<-DF.IPA #for troubleshooting
+      if(type == "IPA_upstream"){ #subsets for p<0.05
+        DF.IPA <- DF.IPA[(DF.IPA[,2] < 0.05),] #exlude non-sig (exclude p>0.05)
+      }else{
+        DF.IPA <- DF.IPA[(DF.IPA[,2] > (-log10(0.05))),] #exlude non-sig (exclude p>0.05)
+      }
+      
+      row.names(DF.IPA)<- DF.IPA[,1]
+      
+      if(type == "IPA_upstream"){ #converts to -log p_val for upstream to match pathway
+        DF[,paste(x,"-log_p_value",sep = " ")] <- -log10(DF.IPA[IPA.id.list,2])
+      }else{
+        DF[,paste(x,"-log_p_value",sep = " ")] <- DF.IPA[IPA.id.list,2]
+      }
+      
+      DF[,paste(x,"activation_z_score",sep = " ")]<-DF.IPA[IPA.id.list,3] + 100
+      DF[is.na(DF)]<-0 # all NA's to 0'
+    }
+    
+    DF.ipa.test <<- DF #assign as global variable for troubleshooting
+    
+    #set color parameters
+    hm.breaks <- c(0,seq(-log10(0.05),max(DF[DF<75]),length = 10)) #sets breaks for color scale, total # of breaks = 31 
+    #if no negative z scores in entire data frame exclude those breaks/colors
+    if(length(DF[DF>75 & DF<100]) != 0){ 
+      hm.breaks <- c(hm.breaks,seq(min(DF[DF>75])-0.00001,max(DF[DF<98]),length = 10))
+    }else{
+      hm.breaks <- c(hm.breaks,99.9999)
+    }
+    hm.breaks <- c(hm.breaks,seq(min(DF[DF>102]),max(DF[(DF>102 & DF<150)]),length = 10),151)
+    print("color scale breaks:")
+    print(hm.breaks)
+    
+    col1 <- (colorRampPalette(c("black",'red'))(9+4))[5:13]
+    col2 <- (colorRampPalette(c("purple",'white'))(9+4))[1:9]
+    col3 <- (colorRampPalette(c("white",'orange'))(9+4))[5:13]
+    hm.colors <- c("white",col1,"grey") #should be 1 less than hm.breaks; white = no enrichment
+    #if no negative z scores in entire data frame exclude those breaks/colors
+    if(length(DF[DF>75 & DF<100]) != 0){
+      hm.colors <- c(hm.colors,col2)
+    }
+    hm.colors <- c(hm.colors,"white",col3,"grey")
+    
+    #make annotation data frame
+    hm.col.annotation <- data.frame(Cell.Line <- factor(rep(c("FLAM76","MMM1"),each = 16)),
+                                    Day <- factor(rep(c("Day 4","Day 4",rep("Day 5.5",6)),4)),
+                                    EPZ <- factor(rep(c("+","+","+","+","-","-","+","+"),4)),
+                                    PAN <- factor(rep(c("-","-","-","-","+","+","+","+"),4)),
+                                    METHOD <- factor(rep(c("cuffdiff","rankproduct"),each =8, times =2)),
+                                    row.names = colnames(DF))
+    colnames(hm.col.annotation)<-c("Cell Line","Sampling Day     ","EPZ6438","Panobinostat","Method")
+    #specify colors for annotation
+    hm.col.annotation.colors <- list("Cell Line" = c(FLAM76 = "gold",MMM1 ="darkorange2"),
+                                     "Sampling Day     " = c("Day 4" = "royalblue","Day 5.5" = "navy"),
+                                     "EPZ6438" = c("+" = "black","-" = "white"),
+                                     "Panobinostat" = c("+" = "black","-" = "white"),
+                                     "Method" = c("cuffdiff" = "red","rankproduct" = "green"))
+    
+    #generate heatmap
+    if(height < 1) {hm.ylab <- FALSE}else{hm.ylab <- TRUE} #dont display genes if cells are too short
+    pheatmap(DF,
+             color = hm.colors,
+             breaks = hm.breaks,
+             cluster_rows = FALSE,
+             cluster_cols = FALSE,
+             gaps_col = c(2,2,2,4,6,8,8,8,8,8,8,10,10,10,12,14,16,16,16,16,16,16,18,18,20,22,24,24,24,24,24,24,26,26,26,28,30),#by day
+             cellwidth = width,
+             cellheight = height,
+             treeheight_row = 0,
+             annotation_col = hm.col.annotation,
+             annotation_colors = hm.col.annotation.colors,
+             show_colnames = FALSE,
+             show_rownames = hm.ylab,
+             legend_labels = c("log2 Fold change"),
+             fontsize_row = height +3
+    )
+  }
+  
+  IPA.final.upstream.list <-c(
+    "EZH2",
+    "Hdac",
+    "HDAC1",
+    "HDAC2",
+    "CCND1",
+    "TP53",
+    "MYC",
+    "MYCN",
+    "BTK",
+    "MAPK1",
+    "ERBB2",
+    "TNF",
+    "ATM",
+    "Jnk",
+    "BRD4",
+    "P38 MAPK",
+    "EIF2AK2",
+    "SMARCA4",
+    "SMARCB1",
+    "Interferon alpha",
+    "IFNG",
+    "STAT1",
+    "IRF4",
+    "SOCS1",
+    "SOCS3",
+    "estrogen receptor",
+    "ESR1",
+    "BCL6",
+    "PTEN",
+    "HIF1A",
+    "TGFB1",
+    "NFkB (complex)",
+    "JMJD6"
+  )
+  
+  
+  IPA.final.pathway.list <-c(
+    "Interferon Signaling",
+    "B Cell Development",
+    "Antigen Presentation Pathway",
+    "Molecular Mechanisms of Cancer",
+    "Calcium-induced T Lymphocyte Apoptosis",
+    "IL-4 Signaling",
+    "Th1 and Th2 Activation Pathway",
+    "Integrin Signaling",
+    "Phagosome Formation",
+    "Axonal Guidance Signaling",
+    "Epithelial Adherens Junction Signaling",
+    "IL-8 Signaling",
+    "Mitochondrial Dysfunction",
+    "Endoplasmic Reticulum Stress Pathway",
+    "Granzyme A Signaling",
+    "Estrogen-mediated S-phase Entry",
+    "Cyclins and Cell Cycle Regulation",
+    "Cell Cycle Control of Chromosomal Replication",
+    "Fatty Acid β-oxidation I",
+    "Sirtuin Signaling Pathway",
+    "tRNA Charging"
+  )
+  
+  #generate heatmaps
+  IPA.heatmap4(IPA.final.upstream.list,type = "IPA_upstream",height = 15,width = 15)
+  IPA.heatmap4(IPA.final.pathway.list,type = "IPA_pathway",height = 15,width = 15)
+  
+  
+  
+#compile new lists of regulators/pathways based on most frequent/significant RP hits
+  #test that RP hits are also contained in cuffdiff data
+  
+  #iterate through each of the rankproduct anallysis ipa output files and generate a list of most frequently represented hits
+  
+    #upstream regulators
+    IPA.upstream.3.unique <- character()
+    for (x in IPA.upstream.3) {
+      IPA.upstream.3.unique <- unique(c(IPA.upstream.3.unique,get(x)$Upstream.Regulator))
+    }
+    rm(x)
+    
+    IPA.upstream.3.freqcount <- data.frame(row.names = IPA.upstream.3.unique)
+    for (x in IPA.upstream.3) {
+      print(x)
+      data <- get(x)
+      index <- rownames(IPA.upstream.3.freqcount)[which(rownames(IPA.upstream.3.freqcount) %in% data$Upstream.Regulator)]
+      print(length(index))
+      row.names(data)<-data$Upstream.Regulator
+      IPA.upstream.3.freqcount[index,x] <- data[index,"p.value.of.overlap"]
+    }
+    rm(x,data,index)
+    #remove insignificant values before freq count (IPA does kick back some)
+    IPA.upstream.3.freqcount[IPA.upstream.3.freqcount >0.05]<- NA
+    IPA.upstream.3.freqcount$freqcount <- rowSums(!(is.na(IPA.upstream.3.freqcount)))
+    #sort by freq# and then lowest mena pval
+    IPA.upstream.3.freqcount <- IPA.upstream.3.freqcount[order(-IPA.upstream.3.freqcount$freqcount, rowMeans(IPA.upstream.3.freqcount[,1:8], na.rm = TRUE)),]
+    
+    #regulators for heatmap
+    IPA.RP.upstream.list <- rownames(IPA.upstream.3.freqcount)[1:100]
+  #visualize heatmap
+  IPA.heatmap4(IPA.RP.upstream.list,type = "IPA_upstream",height = 6,width = 6)
+    
+    
+    
+    
+    
+    
+    #canonical pathways
+    IPA.pathway.3.unique <- character()
+    for (x in IPA.pathway.3) {
+      IPA.pathway.3.unique <- unique(c(IPA.pathway.3.unique,get(x)$Ingenuity.Canonical.Pathways))
+    }
+    rm(x)
+    
+    IPA.pathway.3.freqcount <- data.frame(row.names = IPA.pathway.3.unique)
+    for (x in IPA.pathway.3) {
+      print(x)
+      data <- get(x)
+      index <- rownames(IPA.pathway.3.freqcount)[which(rownames(IPA.pathway.3.freqcount) %in% data$Ingenuity.Canonical.Pathways)]
+      print(length(index))
+      row.names(data)<-data$Ingenuity.Canonical.Pathways
+      IPA.pathway.3.freqcount[index,x] <- data[index,"X.log.p.value."]
+    }
+    rm(x,data,index)
+    #remove insignificant values before freq count (IPA does kick back some)
+    IPA.pathway.3.freqcount[IPA.pathway.4.freqcount < -log10(0.05)]<- NA
+    IPA.pathway.3.freqcount$freqcount <- rowSums(!(is.na(IPA.pathway.3.freqcount)))
+    #sort by freq# and then lowest mena pval
+    IPA.pathway.3.freqcount <- IPA.pathway.3.freqcount[order(-IPA.pathway.3.freqcount$freqcount, -rowMeans(IPA.pathway.3.freqcount[,1:8], na.rm = TRUE)),]
+    
+    #regulators for heatmap
+    IPA.RP.pathway.list <- rownames(IPA.pathway.3.freqcount)[1:100]
+  #visualize heatmap
+  IPA.heatmap4(IPA.RP.pathway.list,type = "IPA_pathway",height = 6,width = 6)
+
+  
+############ additional IPA analysis from RP data #############################################################
+  #open question - the lack of overlap between informatic results is expected to a point do to 
+    #the differences in number of sigdiff genes output by each method
+    #are these diferences reflecting a dissagreement on which genes are differentially expressed 
+    #due to the method only producing a smaller number of differentially expressed genes
+    #...or are the distributions in significance correlate such that RP method simply produces a much
+    #more conservative threshold?
+  #test: lower cuttoff from pf<0.05 to pfp<0.15 (roughly doubles genes considered by IPA as significant)
+      #~600 in combos, ~300 in single agents at day 5 (except FA5vFB5 where very little change is seen in any tested method)
+    #use same fc cutoffs (this was filtered before IPA inport anyway, pfp cuttoff was not)
+    #exclude day one observation
+  
+  
+  #parse in new IPA output files (tab delim files manually downloaded in IPA client)
+  setwd("D:/Post-doc applications/TG at UCSF/Re-quantfied EZH2 paper RNASEQ data for IPA output 2/Pathway/")  
+  for(x in list.files()){
+    xx <- unlist(strsplit(x,split = ".txt"))
+    y <- read.table(x,header = TRUE,sep = "\t",stringsAsFactors = FALSE,skip = 2)
+    #get molecules as list instead of comma delim
+    y$list <- sapply(y$Molecules, function(x){unlist(strsplit(x,split = ","))})
+    y <- y[,c("Ingenuity.Canonical.Pathways","X.log.p.value.","z.score","list")]
+    assign(paste(xx,"IPA_pathway","4",sep = "_"),y)
+  }
+  rm(x,xx,y)
+  
+  #upstream
+  #set wd to upstream analysis files
+  setwd("D:/Post-doc applications/TG at UCSF/Re-quantfied EZH2 paper RNASEQ data for IPA output 2/UR/")  
+  for(x in list.files()){
+    print(x)
+    xx <- unlist(strsplit(x,split = ".txt"))
+    
+    y <- read.table(x,header = TRUE,sep = "\t",stringsAsFactors = FALSE,skip = 2,fill = TRUE) 
+    #must manually add null activation Z score cols for both A5vB5's (column does not exist in output file)
+    if (xx == "MA5vMB5" | xx == "FA5vFB5" ){
+      y$Activation.z.score <- NA
+    }
+    #get molecules as list instead of comma delim
+    y$list <- sapply(y$Target.molecules.in.dataset, function(x){unlist(strsplit(x,split = ","))})
+    y <- y[,c("Upstream.Regulator","p.value.of.overlap","Activation.z.score","list")]
+    assign(paste(xx,"IPA_upstream","4",sep = "_"),y)
+  }
+  rm(x,xx,y)
+  
+  #make named list of df names for each
+  IPA.all <- c("FA4vFE4", "FA5vFB5", "FA5vFE5", "FA5vFG5", "MA4vME4", "MA5vMB5", "MA5vME5", "MA5vMG5")
+  IPA.pathway.4 <- sapply(IPA.all,function(x) {paste(x,"IPA_pathway_4",sep = "_")})
+  IPA.upstream.4 <- sapply(IPA.all,function(x) {paste(x,"IPA_upstream_4",sep = "_")})
+  
+  
+  #generate heatmaps
+  #added analysis.number argument to heatmap func (char: expects "3" or "4" where 4 is ipa output with more liberal cuttoff)
+    #default = "3" for back compatability when running above code
+  IPA.heatmap4(IPA.final.upstream.list,type = "IPA_upstream",height = 15,width = 15, analysis.number = "4")
+  IPA.heatmap4(IPA.final.pathway.list,type = "IPA_pathway",height = 15,width = 15, analysis.number = "4")
+  
+  #iterate through each of the rankproduct anallysis ipa output files and generate a list of most frequently represented hits
+  
+  #upstream regulators
+  IPA.upstream.4.unique <- character()
+  for (x in IPA.upstream.4) {
+    IPA.upstream.4.unique <- unique(c(IPA.upstream.4.unique,get(x)$Upstream.Regulator))
+  }
+  rm(x)
+  
+  IPA.upstream.4.freqcount <- data.frame(row.names = IPA.upstream.4.unique)
+  for (x in IPA.upstream.4) {
+    print(x)
+    data <- get(x)
+    index <- rownames(IPA.upstream.4.freqcount)[which(rownames(IPA.upstream.4.freqcount) %in% data$Upstream.Regulator)]
+    print(length(index))
+    row.names(data)<-data$Upstream.Regulator
+    IPA.upstream.4.freqcount[index,x] <- data[index,"p.value.of.overlap"]
+  }
+  rm(x,data,index)
+  #remove insignificant values before freq count (IPA does kick back some)
+  IPA.upstream.4.freqcount[IPA.upstream.4.freqcount >0.05]<- NA
+  IPA.upstream.4.freqcount$freqcount <- rowSums(!(is.na(IPA.upstream.4.freqcount)))
+  #sort by freq# and then lowest mena pval
+  IPA.upstream.4.freqcount <- IPA.upstream.4.freqcount[order(-IPA.upstream.4.freqcount$freqcount, rowMeans(IPA.upstream.4.freqcount[,1:8], na.rm = TRUE)),]
+  
+  #regulators for heatmap
+  IPA.RP.4.upstream.list <- rownames(IPA.upstream.4.freqcount)[1:100]
+  #visualize heatmap
+  IPA.heatmap4(IPA.RP.4.upstream.list,type = "IPA_upstream",height = 6,width = 6, analysis.number = "4")
+  
+  
+  
+  
+  
+  
+  #canonical pathways
+  IPA.pathway.4.unique <- character()
+  for (x in IPA.pathway.4) {
+    IPA.pathway.4.unique <- unique(c(IPA.pathway.4.unique,get(x)$Ingenuity.Canonical.Pathways))
+  }
+  rm(x)
+  
+  IPA.pathway.4.freqcount <- data.frame(row.names = IPA.pathway.4.unique)
+  for (x in IPA.pathway.4) {
+    print(x)
+    data <- get(x)
+    index <- rownames(IPA.pathway.4.freqcount)[which(rownames(IPA.pathway.4.freqcount) %in% data$Ingenuity.Canonical.Pathways)]
+    print(length(index))
+    row.names(data)<-data$Ingenuity.Canonical.Pathways
+    IPA.pathway.4.freqcount[index,x] <- data[index,"X.log.p.value."]
+  }
+  rm(x,data,index)
+  #remove insignificant values before freq count (IPA does kick back some)
+  IPA.pathway.4.freqcount[IPA.pathway.4.freqcount < -log10(0.05)]<- NA
+  IPA.pathway.4.freqcount$freqcount <- rowSums(!(is.na(IPA.pathway.4.freqcount)))
+  #sort by freq# and then lowest mena pval
+  IPA.pathway.4.freqcount <- IPA.pathway.4.freqcount[order(-IPA.pathway.4.freqcount$freqcount, -rowMeans(IPA.pathway.4.freqcount[,1:8], na.rm = TRUE)),]
+  
+  #regulators for heatmap
+  IPA.RP.4.pathway.list <- rownames(IPA.pathway.4.freqcount)[1:100]
+  #visualize heatmap
+  IPA.heatmap4(IPA.RP.4.pathway.list,type = "IPA_pathway",height = 6,width = 6, analysis.number = "4")
+  
+  
+  #generate table to illustrate overlapping gene sets for each condition
+    #two tables, one for RP data at two threasholds
+  
+  final.row.names <- c(
+    "FLAM76 DAY 4 EPZ6438",
+    "FLAM76 DAY 5 Panobinostat",
+    "FLAM76 DAY 5 EPZ6438",
+    "FLAM76 DAY 5 Combination",
+    "MMM1 DAY 4 EPZ6438",
+    "MMM1 DAY 5 Panobinostat",
+    "MMM1 DAY 5 EPZ6438",
+    "MMM1 DAY 5 Combination"
+  )
+  
+  
+  #declare data.frame to populate with comparisons
+    #IPA.all = "FA4vFE4" "FA5vFB5" "FA5vFE5" "FA5vFG5" "MA4vME4" "MA5vMB5" "MA5vME5" "MA5vMG5"
+  #RP pfp<0.05
+  CD.RP.compare.1 <- data.frame(row.names = IPA.all)
+  for (x in IPA.all) {
+    data <- get(x)
+    #filter for |fc|>1.5, FPKM>1 in at least one (treatment/control) and qval<0.05
+    data <- data[abs(data$log2.fold_change.)>log2(1.5) & (data$value_1 >=1 | data$value_2 >= 1) & data$q_value < 0.05,]
+    CD.up <- data$gene[data$log2.fold_change.>0]
+    CD.down <- data$gene[data$log2.fold_change.<0]
+    CD.RP.compare.1[x,"Cuffdiff Upregulated"] <- length(CD.up)
+    CD.RP.compare.1[x,"Cuffdiff Downregulated"] <- length(CD.down)
+    
+    data <- get(paste(x,".2.ipa", sep = ""))
+    #already filtered for FPKM and FC (same cutoffs as CD data)
+    #filter for pfp cutoff @ 0.05
+    data <- data[data$RP.pfp <0.05,]
+    RP.up <- row.names(data)[data$RP.fc>0]
+    RP.down <- row.names(data)[data$RP.fc<0]
+    CD.RP.compare.1[x,"Rankproduct Upregulated"] <- length(RP.up)
+    CD.RP.compare.1[x,"Rankproduct Downregulated"] <- length(RP.down)
+    
+    CD.RP.compare.1[x,"Overlap Upregulated"] <- length(intersect(CD.up,RP.up))
+    CD.RP.compare.1[x,"Overlap Downregulated"] <- length(intersect(CD.down,RP.down))
+  }
+  rm(x,data)
+  row.names(CD.RP.compare.1)<- final.row.names
+  
+  
+  #RP pfp<0.15
+  CD.RP.compare.2 <- data.frame(row.names = IPA.all)
+  for (x in IPA.all) {
+    data <- get(x)
+    #filter for |fc|>1.5, FPKM>1 in at least one (treatment/control) and qval<0.05
+    data <- data[abs(data$log2.fold_change.)>log2(1.5) & (data$value_1 >=1 | data$value_2 >= 1) & data$q_value < 0.05,]
+    CD.up <- data$gene[data$log2.fold_change.>0]
+    CD.down <- data$gene[data$log2.fold_change.<0]
+    CD.RP.compare.2[x,"Cuffdiff Upregulated"] <- length(CD.up)
+    CD.RP.compare.2[x,"Cuffdiff Downregulated"] <- length(CD.down)
+    
+    data <- get(paste(x,".2.ipa", sep = ""))
+    #already filtered for FPKM and FC (same cutoffs as CD data)
+    #filter for pfp cutoff @ 0.05
+    data <- data[data$RP.pfp <0.15,]
+    RP.up <- row.names(data)[data$RP.fc>0]
+    RP.down <- row.names(data)[data$RP.fc<0]
+    CD.RP.compare.2[x,"Rankproduct Upregulated"] <- length(RP.up)
+    CD.RP.compare.2[x,"Rankproduct Downregulated"] <- length(RP.down)
+    
+    CD.RP.compare.2[x,"Overlap Upregulated"] <- length(intersect(CD.up,RP.up))
+    CD.RP.compare.2[x,"Overlap Downregulated"] <- length(intersect(CD.down,RP.down))
+  }
+  rm(x,data)
+  row.names(CD.RP.compare.2)<- final.row.names
+  
+  #save comparison data.frames to .csv files
+  setwd("D:/Post-doc applications/TG at UCSF/")
+  write.csv(CD.RP.compare.1, "Overlapping genes between methods.csv")
+  write.csv(CD.RP.compare.2, "Overlapping genes between methods loosened cutoff.csv")
+  
